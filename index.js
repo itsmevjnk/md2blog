@@ -10,9 +10,9 @@ let postTemplate;
 const postTemplatePath = path.join(TEMPLATE_DIR, 'post.html');
 try {
     postTemplate = fs.readFileSync(postTemplatePath).toString();
-    console.debug(`Loaded post template from ${postTemplate}`);
+    console.debug(`Loaded post template from ${postTemplatePath}`);
 } catch (err) {
-    console.error(`Cannot open post template filr ${postTemplatePath}: ${err}`);
+    console.error(`Cannot open post template file ${postTemplatePath}: ${err}`);
     process.exit(1);
 }
 
@@ -29,9 +29,18 @@ showdown.setOption('extensions', Object.keys(classes).map((key) => ({
     regex: new RegExp(`<${key}([^>]*)>`, 'g'),
     replace: `<${key} class="${classes[key]}" $1>`
 })));
-showdown.setOption('tables', true);
-showdown.setOption('strikethrough', true);
-showdown.setOption('noHeaderId', true); // remove clutter
+showdown.setFlavor('github');
+const sdOptions = {
+    extensions: Object.keys(classes).map((key) => ({
+        type: 'output',
+        regex: new RegExp(`<${key}([^>]*)>`, 'g'),
+        replace: `<${key} class="${classes[key]}" $1>`
+    })),
+    metadata: true,
+    tables: true,
+    strikethrough: true,
+    noHeaderId: true
+};
 
 let inputFiles;
 try {
@@ -58,31 +67,57 @@ if (fs.existsSync(staticPath)) {
     fs.cpSync(staticPath, OUTPUT_DIR, { recursive: true });
 }
 
+let posts = new Map();
+
 for (let file of inputFiles) {
+    const fileParsed = path.parse(file);
     const filePath = path.join(INPUT_DIR, file);
     
     console.log(`Converting ${filePath}...`);
+    const converter = new showdown.Converter(sdOptions);
     let html;
     try {
-        html = new showdown.Converter().makeHtml(fs.readFileSync(filePath).toString());
+        html = converter.makeHtml(fs.readFileSync(filePath).toString());
     } catch (err) {
-        console.error(`Cannot convert ${filePath}: ${err}`);
+        console.error(` - Cannot convert ${filePath}: ${err}`);
         continue;
     }
 
-    /* extract title */
-    let title = '';
-    for (let i = 1; i <= 6; i++) {
-        let titleMatch = /<h1[^>]*>(.*)<\/h1>/g.exec(html);
-        if (!titleMatch) continue;
-        
-        title = titleMatch[1].replaceAll(/<[^>]*>/g, '');
-        break;
-    }
-    if (!title.length) console.warn(' - No title found');
-    else console.debug(` - Post title: ${title}`);
+    /* get metadata */
+    const metadata = converter.getMetadata();
+    console.debug(` - Metadata:`, metadata);
 
-    const fileParsed = path.parse(file);
+    /* extract title */
+    let title = metadata.title || '';
+    if (!title.length) {
+        for (let i = 1; i <= 6; i++) {
+            let titleMatch = /<h1[^>]*>(.*)<\/h1>/g.exec(html);
+            if (!titleMatch) continue;
+            
+            title = titleMatch[1].replaceAll(/<[^>]*>/g, '');
+            break;
+        }
+        if (!title.length) console.warn(' - No title found');
+    }
+    console.debug(` - Post title: ${title}`);
+
+    /* extract date */
+    let date;
+    try {
+        date = new Date(metadata.date || fs.statSync(filePath).mtime);
+    } catch (err) {
+        console.error(` - Cannot stat ${filePath}`);
+        date = new Date();
+    }
+    console.debug(` - Post date: ${date}`);
+    if (fileParsed.name.toLowerCase() != 'index') {
+        posts.set(date.getTime(), {
+            date: date.toDateString(),
+            link: fileParsed.name + '.html',
+            title: title
+        });
+    }
+
     const outputDir = path.join(OUTPUT_DIR, fileParsed.dir);
     if (!fs.existsSync(outputDir)) {
         try {
@@ -101,4 +136,53 @@ for (let file of inputFiles) {
         console.error(` - Cannot write output file ${outputPath}: ${err} - skipping`);
         continue;
     }
+}
+
+posts = new Map([...posts.entries()].sort().reverse());
+// console.debug('List of posts sorted by date:', posts);
+
+let postsTemplate;
+const postsTemplatePath = path.join(TEMPLATE_DIR, 'posts.html');
+try {
+    postsTemplate = fs.readFileSync(postsTemplatePath).toString();
+    console.debug(`Loaded post template from ${postsTemplatePath}`);
+} catch (err) {
+    console.error(`Cannot open posts list template file ${postsTemplatePath}: ${err}`);
+    process.exit(1);
+}
+
+const templateReplacements = []; // list of replacements to be made
+for (let match of postsTemplate.matchAll(/\${ITEM:([^}]*)}/gm)) {
+    const repl = {
+        index: match.index,
+        length: match[0].length,
+        value: ''
+    };
+    posts.forEach((post) => {
+        // console.debug(posts);
+        repl.value += match[1]
+            .replaceAll('$DATE', post.date)
+            .replaceAll('$LINK', post.link)
+            .replaceAll('$TITLE', post.title);
+    });
+    templateReplacements.push(repl);
+}
+
+let templateIndex = 0;
+let postsOutput = '';
+for (const repl of templateReplacements) {
+    postsOutput += postsTemplate.slice(templateIndex, repl.index); // copy up to our replacement point
+    postsOutput += repl.value;
+    templateIndex = repl.index + repl.length;
+}
+postsOutput += postsTemplate.slice(templateIndex); // copy remaining parts of the template
+
+const postsPath = path.join(OUTPUT_DIR, 'posts.html');
+
+console.debug(`Writing posts list file ${postsPath}...`);
+try {
+    fs.writeFileSync(postsPath, postsOutput);
+} catch (err) {
+    console.error(` - Cannot write to posts list file ${postsPath}: ${err}`);
+    process.exit(1);
 }
