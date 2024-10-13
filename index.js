@@ -18,17 +18,19 @@ try {
 
 let classes = {};
 const classesPath = path.join(TEMPLATE_DIR, 'classes.json');
-try {
-    classes = JSON.parse(fs.readFileSync(classesPath));
-    console.debug(`Loaded custom classes for ${Object.keys(classes).length} element(s) from ${classesPath}`);
-} catch (err) {
-    console.warn(`Cannot open classes file ${classesPath}: ${err} - not setting custom classes for elements`);
+if (fs.existsSync(classesPath)) {
+    try {
+        classes = JSON.parse(fs.readFileSync(classesPath));
+        console.debug(`Loaded custom classes for ${Object.keys(classes).length} element(s) from ${classesPath}`);
+    } catch (err) {
+        console.warn(`Cannot open classes file ${classesPath}: ${err} - not setting custom classes for elements`);
+    }
+    showdown.setOption('extensions', Object.keys(classes).map((key) => ({
+        type: 'output',
+        regex: new RegExp(`<${key}([^>]*)>`, 'g'),
+        replace: `<${key} class="${classes[key]}" $1>`
+    })));
 }
-showdown.setOption('extensions', Object.keys(classes).map((key) => ({
-    type: 'output',
-    regex: new RegExp(`<${key}([^>]*)>`, 'g'),
-    replace: `<${key} class="${classes[key]}" $1>`
-})));
 showdown.setFlavor('github');
 const sdOptions = {
     extensions: Object.keys(classes).map((key) => ({
@@ -41,6 +43,16 @@ const sdOptions = {
     strikethrough: true,
     noHeaderId: true
 };
+
+let postsTemplate;
+const postsTemplatePath = path.join(TEMPLATE_DIR, 'posts.html');
+try {
+    postsTemplate = fs.readFileSync(postsTemplatePath).toString();
+    console.debug(`Loaded posts list template from ${postsTemplatePath}`);
+} catch (err) {
+    console.error(`Cannot open posts list template file ${postsTemplatePath}: ${err}`);
+    process.exit(1);
+}
 
 let inputFiles;
 try {
@@ -57,6 +69,17 @@ if (!fs.existsSync(OUTPUT_DIR)) {
     } catch (err) {
         console.error(`Cannot create output directory ${OUTPUT_DIR}: ${err}`);
         process.exit(1);   
+    }
+}
+
+const staticPath = path.join(TEMPLATE_DIR, 'static');
+if (fs.existsSync(staticPath)) {
+    console.log('Copying static files from template...');
+    try {
+        fs.cpSync(staticPath, OUTPUT_DIR, { recursive: true });
+    } catch (err) {
+        console.error(`Cannot copy static files from ${staticPath} to ${OUTPUT_DIR}: ${err}`);
+        process.exit(1);
     }
 }
 
@@ -150,16 +173,6 @@ for (let file of inputFiles) {
 
 posts = new Map([...posts.entries()].sort().reverse());
 // console.debug('List of posts sorted by date:', posts);
-
-let postsTemplate;
-const postsTemplatePath = path.join(TEMPLATE_DIR, 'posts.html');
-try {
-    postsTemplate = fs.readFileSync(postsTemplatePath).toString();
-    console.debug(`Loaded posts list template from ${postsTemplatePath}`);
-} catch (err) {
-    console.error(`Cannot open posts list template file ${postsTemplatePath}: ${err}`);
-    process.exit(1);
-}
 
 const templateReplacements = []; // list of replacements to be made
 for (let match of postsTemplate.matchAll(/\${ITEM:([^}]*)}/gm)) {
