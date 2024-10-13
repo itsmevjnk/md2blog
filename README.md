@@ -6,6 +6,8 @@
 
 It is written in NodeJS, and makes use of [Showdown](https://github.com/showdownjs/showdown) for converting Markdown documents to HTML. These documents are then added into a template containg placeholders such as `${TITLE}` and `${CONTENT}`, and are saved as complete HTML files ready for deployment.
 
+A live demo of a website generated using it can be found here: [https://itsmevjnk.github.io/md2blog/](https://itsmevjnk.github.io/md2blog/)
+
 ## Installation
 
 Since this is a NodeJS-based application, make sure that you already have it installed. Installation guides for NodeJS can be found on [its website](https://nodejs.org/).
