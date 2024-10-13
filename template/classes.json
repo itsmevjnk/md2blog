@@ -1,0 +1,9 @@
+{
+    "h1": "pb-1 mb-3",
+    "h2": "pb-1 mb-3",
+    "h3": "pb-1 mb-3",
+    "h4": "pb-1 mb-3",
+    "h5": "pb-1 mb-3",
+    "h6": "pb-1 mb-3",
+    "pre": "bg-secondary-subtle p-2 rounded-3"
+}

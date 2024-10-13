@@ -1,0 +1,24 @@
+{
+  "dependencies": {
+    "showdown": "^2.1.0"
+  },
+  "name": "md2blog",
+  "version": "1.0.0",
+  "main": "index.js",
+  "devDependencies": {},
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/itsmevjnk/md2blog.git"
+  },
+  "author": "itsmevjnk",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/itsmevjnk/md2blog/issues"
+  },
+  "homepage": "https://github.com/itsmevjnk/md2blog#readme",
+  "description": ""
+}
