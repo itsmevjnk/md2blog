@@ -44,7 +44,7 @@ const sdOptions = {
 
 let inputFiles;
 try {
-    inputFiles = fs.readdirSync(INPUT_DIR, { recursive: true });
+    inputFiles = fs.readdirSync(INPUT_DIR, { recursive: true, withFileTypes: true });
 } catch(err) {
     console.error(`Cannot open input directory ${INPUT_DIR}: ${err}`);
     process.exit(1);
@@ -60,18 +60,25 @@ if (!fs.existsSync(OUTPUT_DIR)) {
     }
 }
 
-const staticPath = path.join(TEMPLATE_DIR, 'static');
-if (fs.existsSync(staticPath)) {
-    console.log('Copying static files...');
-
-    fs.cpSync(staticPath, OUTPUT_DIR, { recursive: true });
-}
-
 let posts = new Map();
 
 for (let file of inputFiles) {
-    const fileParsed = path.parse(file);
-    const filePath = path.join(INPUT_DIR, file);
+    if (!file.isFile()) continue; // ignore directory dirents
+
+    const filePath = path.join(file.parentPath, file.name);
+    const fileParsed = path.parse(file.name);
+
+    if (fileParsed.ext.toLowerCase() != '.md') {
+        /* not Markdown - just copy the file over to the output */
+        console.log(`Copying ${filePath}...`);
+        const pathParts = filePath.split(path.sep); pathParts[0] = OUTPUT_DIR; const destPath = path.join(...pathParts);
+        try {
+            fs.cpSync(filePath, destPath, { recursive: true });
+        } catch (err) {
+            console.error(` - Cannot copy file ${filePath} to ${destPath}: ${err}`);
+        }
+        continue;
+    }
     
     console.log(`Converting ${filePath}...`);
     const converter = new showdown.Converter(sdOptions);
@@ -110,13 +117,6 @@ for (let file of inputFiles) {
         date = new Date();
     }
     console.debug(` - Post date: ${date}`);
-    if (fileParsed.name.toLowerCase() != 'index') {
-        posts.set(date.getTime(), {
-            date: date.toDateString(),
-            link: fileParsed.name + '.html',
-            title: title
-        });
-    }
 
     const outputDir = path.join(OUTPUT_DIR, fileParsed.dir);
     if (!fs.existsSync(outputDir)) {
@@ -128,6 +128,7 @@ for (let file of inputFiles) {
             continue;  
         }
     }
+
     const outputPath = path.join(outputDir, fileParsed.name + '.html');
     try {
         fs.writeFileSync(outputPath, postTemplate.replaceAll('${TITLE}', title).replaceAll('${CONTENT}', html));
@@ -135,6 +136,15 @@ for (let file of inputFiles) {
     } catch (err) {
         console.error(` - Cannot write output file ${outputPath}: ${err} - skipping`);
         continue;
+    }
+    
+    /* save to posts list */
+    if (fileParsed.name.toLowerCase() != 'index') {
+        posts.set(date.getTime(), {
+            date: date.toDateString(),
+            link: fileParsed.name + '.html',
+            title: title
+        });
     }
 }
 
@@ -145,7 +155,7 @@ let postsTemplate;
 const postsTemplatePath = path.join(TEMPLATE_DIR, 'posts.html');
 try {
     postsTemplate = fs.readFileSync(postsTemplatePath).toString();
-    console.debug(`Loaded post template from ${postsTemplatePath}`);
+    console.debug(`Loaded posts list template from ${postsTemplatePath}`);
 } catch (err) {
     console.error(`Cannot open posts list template file ${postsTemplatePath}: ${err}`);
     process.exit(1);
